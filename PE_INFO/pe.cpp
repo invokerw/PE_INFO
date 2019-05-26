@@ -104,6 +104,8 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 	}
 
 	//输入表  p_image_nt_header->OptionalHeader.DataDirectory[1] 存放 第二个
+	//目录表的 12 个成员指向绑定输入 IMAGE_BOUND_IMPORT_DESCRIPTOR 每个绑定的结构都指出了一个被绑定输入 DLL 的时间/日期戳
+
 	//PIMAGE_IMPORT_DESCRIPTOR p_image_import_descriptor_base
 	for (int i = 0;;++i)
 	{
@@ -123,12 +125,18 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 			if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
 			{
 				//是序列号
+				//std::cout << "\tIMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
 			}
 			else
 			{
 				//是 RVA
+				PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
+				p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
+				p_image_import_by_name->Name; //输入函数的函数名
+
+				//std::cout << "\tIMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint <<" Name:"<< (const char*)p_image_import_by_name->Name << std::endl;
 			}
-			std::cout << "\tOriginalFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
+			//std::cout << "\tOriginalFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
 		}
 
 		PIMAGE_THUNK_DATA p_ft_base = (PIMAGE_THUNK_DATA)((DWORDX)base + tmp.FirstThunk - import_descriptor_offset);
@@ -136,11 +144,44 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 		{
 			IMAGE_THUNK_DATA ith_tmp = p_ft_base[j];
 			if (ith_tmp.u1.ForwarderString == NULL) break;
-			std::cout << "\tFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
+			if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
+			{
+				//是序列号
+				std::cout << "\tFirstThunk IMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
+			}
+			else
+			{
+				//是 RVA
+				PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
+				p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
+				p_image_import_by_name->Name; //输入函数的函数名
+
+				std::cout << "\tFirstThunk IMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint << " Name:" << (const char*)p_image_import_by_name->Name << std::endl;
+			}
+			//std::cout << "\tFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
 		}
 
 		std::cout << "IMPORT_DESCRIPTOR Name:" << (const char*)((DWORDX)base + tmp.Name - import_descriptor_offset)  << std::endl;
 	}
+
+	//绑定输入
+
+	//输出表
+
+	//基地址重定位
+
+	//资源
+
+	// TLS 初始化
+
+	//调试目录
+
+	//延迟载入数据
+
+	//程序异常数据
+
+	//.NET 头部
+
 
 
 	return true;
