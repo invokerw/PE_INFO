@@ -77,6 +77,9 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 	PIMAGE_BOUND_IMPORT_DESCRIPTOR p_image_bound_import_descriptor_base = NULL;  //绑定输入表基地址
 	DWORDX bound_import_descriptor_offset = 0;
 
+	PIMAGE_EXPORT_DIRECTORY p_image_export_directory_base = NULL;	//导出表
+	DWORDX export_directory_offset = 0;
+
 	//区块
 	PIMAGE_SECTION_HEADER p_image_section_header_base = (PIMAGE_SECTION_HEADER)((DWORDX)p_image_nt_header + sizeof(IMAGE_NT_HEADERS));
 	for (int i = 0; i < image_file_header.NumberOfSections; ++i)
@@ -100,9 +103,17 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 		if (!p_image_bound_import_descriptor_base && p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].VirtualAddress >= tmp.VirtualAddress
 			&& p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].VirtualAddress + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].Size <= tmp.VirtualAddress + tmp.Misc.VirtualSize)
 		{
-			// 输入表在这一块计算, 计算出相对于文件偏移
+			// 绑定输入表在这一块计算, 计算出相对于文件偏移
 			bound_import_descriptor_offset = tmp.VirtualAddress - tmp.PointerToRawData;
-			p_image_bound_import_descriptor_base = (PIMAGE_BOUND_IMPORT_DESCRIPTOR)((DWORDX)base + p_image_data_directory[1].VirtualAddress - bound_import_descriptor_offset);
+			p_image_bound_import_descriptor_base = (PIMAGE_BOUND_IMPORT_DESCRIPTOR)((DWORDX)base + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].VirtualAddress - bound_import_descriptor_offset);
+		}
+
+		if (!p_image_export_directory_base && p_image_data_directory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress >= tmp.VirtualAddress
+			&& p_image_data_directory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size <= tmp.VirtualAddress + tmp.Misc.VirtualSize)
+		{
+			// 导出表在这一块计算, 计算出相对于文件偏移
+			export_directory_offset = tmp.VirtualAddress - tmp.PointerToRawData;
+			p_image_export_directory_base = (PIMAGE_EXPORT_DIRECTORY)((DWORDX)base + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress - export_directory_offset);
 		}
 
 		std::cout << "Section Name:" << (const char*)tmp.Name << 
@@ -219,7 +230,48 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 
 
 	//输出表
+	//PIMAGE_EXPORT_DIRECTORY p_image_export_directory_base = NULL;	//导出表
+	//DWORDX export_directory_offset = 0;
+	if (p_image_export_directory_base)
+	{
+		p_image_export_directory_base->Characteristics;			//没用到，一般为0
+		p_image_export_directory_base->TimeDateStamp;			//生成的时间戳
+		p_image_export_directory_base->MajorVersion;			//版本
+		p_image_export_directory_base->MinorVersion;			//版本
+		p_image_export_directory_base->Name;					//名字
+		p_image_export_directory_base->Base;					//序列号的集数，按序列号导出函数的序号值从 Base 开始递增
+		p_image_export_directory_base->NumberOfFunctions;		//所有导出函数的数量
+		p_image_export_directory_base->NumberOfNames;			//按名字导出函数的数量
+		p_image_export_directory_base->AddressOfFunctions;		//一个 RVA，指向一个 DWORD 数组，数组中的每一项是一个导出函数的 RVA，顺序与导出序号相同
+		p_image_export_directory_base->AddressOfNames;			//一个 RVA，依然指向一个 DWORD 数组，数组中的每一项仍然是一个 RVA，指向一个表示函数名字
+		p_image_export_directory_base->AddressOfNameOrdinals;	//一个 RVA，还是指向一个 DWORD ? WORD 数组，数组中的每一项与 AddressOfNames 中的每一项对应，
+																//表示该名字的函数在 AddressOfFunctions 中的序号
 
+		std::cout << "IMAGE_EXPORT_DIRECTORY Name:" << (const char*)((DWORDX)base + p_image_export_directory_base->Name - export_directory_offset) <<
+			" Base:" << p_image_export_directory_base->Base <<
+			" NumberOfFunctions:"<< p_image_export_directory_base->NumberOfFunctions << 
+			" NumberOfNames:" << p_image_export_directory_base->NumberOfNames << std::endl;
+
+		PDWORD tmp = (PDWORD)((DWORDX)base + p_image_export_directory_base->AddressOfFunctions - export_directory_offset);
+		for (auto i = 0; i < p_image_export_directory_base->NumberOfFunctions; ++i)
+		{
+			std::cout << "\tIMAGE_EXPORT_DIRECTORY AddressOfFunctions RVA:" << std::hex << (tmp[i]) << std::endl;
+		}
+
+		tmp = (PDWORD)((DWORDX)base + p_image_export_directory_base->AddressOfNames - export_directory_offset);
+		for (auto i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
+		{
+			std::cout << "\tIMAGE_EXPORT_DIRECTORY AddressOfNames:" << (const char*)((DWORDX)base + tmp[i] - export_directory_offset) << std::endl;
+		}
+
+		PWORD tmp_pword = (PWORD)((DWORDX)base + p_image_export_directory_base->AddressOfNameOrdinals - export_directory_offset);
+		for (auto i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
+		{
+			std::cout << "\tIMAGE_EXPORT_DIRECTORY AddressOfNameOrdinals RVA:" << std::hex << (tmp_pword[i]) << std::endl;
+		}
+
+
+	}
 	//基地址重定位
 
 	//资源
