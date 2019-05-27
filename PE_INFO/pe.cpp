@@ -74,6 +74,9 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 	PIMAGE_IMPORT_DESCRIPTOR p_image_import_descriptor_base = NULL;  //输入表基地址
 	DWORDX import_descriptor_offset = 0;
 
+	PIMAGE_BOUND_IMPORT_DESCRIPTOR p_image_bound_import_descriptor_base = NULL;  //绑定输入表基地址
+	DWORDX bound_import_descriptor_offset = 0;
+
 	//区块
 	PIMAGE_SECTION_HEADER p_image_section_header_base = (PIMAGE_SECTION_HEADER)((DWORDX)p_image_nt_header + sizeof(IMAGE_NT_HEADERS));
 	for (int i = 0; i < image_file_header.NumberOfSections; ++i)
@@ -86,12 +89,20 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 		tmp.PointerToRawData;	//在磁盘文件中的偏移
 		tmp.Characteristics;	//块属性 可读可写可执行等
 
-		if (!p_image_import_descriptor_base && p_image_data_directory[1].VirtualAddress >= tmp.VirtualAddress
-			&& p_image_data_directory[1].VirtualAddress + p_image_data_directory[1].Size <= tmp.VirtualAddress + tmp.Misc.VirtualSize)
+		if (!p_image_import_descriptor_base && p_image_data_directory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress >= tmp.VirtualAddress
+			&& p_image_data_directory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size <= tmp.VirtualAddress + tmp.Misc.VirtualSize)
 		{
 			// 输入表在这一块计算, 计算出相对于文件偏移
 			import_descriptor_offset = tmp.VirtualAddress - tmp.PointerToRawData;
 			p_image_import_descriptor_base = (PIMAGE_IMPORT_DESCRIPTOR)((DWORDX)base + p_image_data_directory[1].VirtualAddress - import_descriptor_offset);
+		}
+		
+		if (!p_image_bound_import_descriptor_base && p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].VirtualAddress >= tmp.VirtualAddress
+			&& p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].VirtualAddress + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT].Size <= tmp.VirtualAddress + tmp.Misc.VirtualSize)
+		{
+			// 输入表在这一块计算, 计算出相对于文件偏移
+			bound_import_descriptor_offset = tmp.VirtualAddress - tmp.PointerToRawData;
+			p_image_bound_import_descriptor_base = (PIMAGE_BOUND_IMPORT_DESCRIPTOR)((DWORDX)base + p_image_data_directory[1].VirtualAddress - bound_import_descriptor_offset);
 		}
 
 		std::cout << "Section Name:" << (const char*)tmp.Name << 
@@ -104,67 +115,108 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 	}
 
 	//输入表  p_image_nt_header->OptionalHeader.DataDirectory[1] 存放 第二个
-	//目录表的 12 个成员指向绑定输入 IMAGE_BOUND_IMPORT_DESCRIPTOR 每个绑定的结构都指出了一个被绑定输入 DLL 的时间/日期戳
-
 	//PIMAGE_IMPORT_DESCRIPTOR p_image_import_descriptor_base
-	for (int i = 0;;++i)
+	//DWORDX import_descriptor_offset = 0;
+	if (p_image_import_descriptor_base)
 	{
-		IMAGE_IMPORT_DESCRIPTOR tmp = p_image_import_descriptor_base[i];
-		tmp.OriginalFirstThunk; //指向输入名称表(INT)的RVA IMAGE_THUNK_DATA  不可改写
-		tmp.TimeDateStamp;		//时间标志
-		tmp.ForwarderChain;		//第一个被转向的 API 索引,一般为 0，在程序引用一个 DLL 中的 API，这个 API 又引用其他 DLL 的 API 使用
-		tmp.Name;				//DLL 名字指针
-		tmp.FirstThunk;			//指向输入地址表(IAT)的 RVA, IMAGE_THUNK_DATA 的数组，PE 装载器重写
-		if (tmp.Name == NULL) break;
-
-		PIMAGE_THUNK_DATA p_oft_base = (PIMAGE_THUNK_DATA)((DWORDX)base + tmp.OriginalFirstThunk - import_descriptor_offset);
-		for (int j = 0;; ++j)
+		for (int i = 0;;++i)
 		{
-			IMAGE_THUNK_DATA ith_tmp = p_oft_base[j];
-			if(ith_tmp.u1.ForwarderString == NULL) break;
-			if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
-			{
-				//是序列号
-				//std::cout << "\tIMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
-			}
-			else
-			{
-				//是 RVA
-				PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
-				p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
-				p_image_import_by_name->Name; //输入函数的函数名
+			IMAGE_IMPORT_DESCRIPTOR tmp = p_image_import_descriptor_base[i];
+			tmp.OriginalFirstThunk; //指向输入名称表(INT)的RVA IMAGE_THUNK_DATA  不可改写
+			tmp.TimeDateStamp;		//时间标志
+			tmp.ForwarderChain;		//第一个被转向的 API 索引,一般为 0，在程序引用一个 DLL 中的 API，这个 API 又引用其他 DLL 的 API 使用
+			tmp.Name;				//DLL 名字指针
+			tmp.FirstThunk;			//指向输入地址表(IAT)的 RVA, IMAGE_THUNK_DATA 的数组，PE 装载器重写
+			if (tmp.Name == NULL) break;
 
-				//std::cout << "\tIMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint <<" Name:"<< (const char*)p_image_import_by_name->Name << std::endl;
+			PIMAGE_THUNK_DATA p_oft_base = (PIMAGE_THUNK_DATA)((DWORDX)base + tmp.OriginalFirstThunk - import_descriptor_offset);
+			for (int j = 0;; ++j)
+			{
+				IMAGE_THUNK_DATA ith_tmp = p_oft_base[j];
+				if(ith_tmp.u1.ForwarderString == NULL) break;
+				if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
+				{
+					//是序列号
+					//std::cout << "\tIMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
+				}
+				else
+				{
+					//是 RVA
+					PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
+					p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
+					p_image_import_by_name->Name; //输入函数的函数名
+
+					//std::cout << "\tIMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint <<" Name:"<< (const char*)p_image_import_by_name->Name << std::endl;
+				}
+				//std::cout << "\tOriginalFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
 			}
-			//std::cout << "\tOriginalFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
+
+			PIMAGE_THUNK_DATA p_ft_base = (PIMAGE_THUNK_DATA)((DWORDX)base + tmp.FirstThunk - import_descriptor_offset);
+			for (int j = 0;; ++j)
+			{
+				IMAGE_THUNK_DATA ith_tmp = p_ft_base[j];
+				if (ith_tmp.u1.ForwarderString == NULL) break;
+				if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
+				{
+					//是序列号
+					std::cout << "\tFirstThunk IMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
+				}
+				else
+				{
+					//是 RVA
+					PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
+					p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
+					p_image_import_by_name->Name; //输入函数的函数名
+
+					std::cout << "\tFirstThunk IMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint << " Name:" << (const char*)p_image_import_by_name->Name << std::endl;
+				}
+				//std::cout << "\tFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
+			}
+
+			std::cout << "IMPORT_DESCRIPTOR Name:" << (const char*)((DWORDX)base + tmp.Name - import_descriptor_offset)  << std::endl;
 		}
-
-		PIMAGE_THUNK_DATA p_ft_base = (PIMAGE_THUNK_DATA)((DWORDX)base + tmp.FirstThunk - import_descriptor_offset);
-		for (int j = 0;; ++j)
-		{
-			IMAGE_THUNK_DATA ith_tmp = p_ft_base[j];
-			if (ith_tmp.u1.ForwarderString == NULL) break;
-			if (IMAGE_SNAP_BY_ORDINAL(ith_tmp.u1.Ordinal))
-			{
-				//是序列号
-				std::cout << "\tFirstThunk IMAGE_THUNK_DATA Hint:" << std::hex << IMAGE_ORDINAL(ith_tmp.u1.Ordinal) << std::endl;
-			}
-			else
-			{
-				//是 RVA
-				PIMAGE_IMPORT_BY_NAME p_image_import_by_name = (PIMAGE_IMPORT_BY_NAME)((DWORDX)base + ith_tmp.u1.Ordinal - import_descriptor_offset);
-				p_image_import_by_name->Hint; //本函数在其所驻留 DLL 的输出表中的序号
-				p_image_import_by_name->Name; //输入函数的函数名
-
-				std::cout << "\tFirstThunk IMAGE_THUNK_DATA IMAGE_IMPORT_BY_NAME Hint:" << std::hex << p_image_import_by_name->Hint << " Name:" << (const char*)p_image_import_by_name->Name << std::endl;
-			}
-			//std::cout << "\tFirstThunk IMAGE_THUNK_DATA :" << std::hex << ith_tmp.u1.Ordinal << std::endl;;
-		}
-
-		std::cout << "IMPORT_DESCRIPTOR Name:" << (const char*)((DWORDX)base + tmp.Name - import_descriptor_offset)  << std::endl;
 	}
 
 	//绑定输入
+	//目录表的 12 个成员指向绑定输入 IMAGE_BOUND_IMPORT_DESCRIPTOR 每个绑定的结构都指出了一个被绑定输入 DLL 的时间/日期戳
+	//PIMAGE_BOUND_IMPORT_DESCRIPTOR p_image_bound_import_descriptor_base;
+	//DWORDX bound_import_descriptor_offset = 0;
+	if (p_image_bound_import_descriptor_base)
+	{
+		PVOID p_void_tmp = (PVOID)p_image_bound_import_descriptor_base;
+		while (1)
+		{
+		
+			PIMAGE_BOUND_IMPORT_DESCRIPTOR tmp = (PIMAGE_BOUND_IMPORT_DESCRIPTOR)p_void_tmp;
+			tmp->TimeDateStamp;					//时间戳
+			tmp->OffsetModuleName;				//名字偏移，基址是 IMAGE_BOUND_IMPORT_DESCRIPTOR 的开端
+			tmp->NumberOfModuleForwarderRefs;	//后面 IMAGE_BOUND_FORWARDER_REF 结构的数量
+
+			if (tmp->TimeDateStamp == NULL && tmp->OffsetModuleName == NULL && tmp->NumberOfModuleForwarderRefs == NULL) break;
+		
+			std::cout << "\tIMAGE_BOUND_IMPORT_DESCRIPTOR Time:" << tmp->TimeDateStamp << " Name:" << (const char*)((DWORDX)p_image_bound_import_descriptor_base + tmp->OffsetModuleName) 
+				<<" NumberOfModuleForwarderRefs:"<< tmp->NumberOfModuleForwarderRefs << std::endl;
+
+			//IMAGE_BOUND_FORWARDER_REF 结构体的内容跟上面的其实是差不多的，绑定导入表中有一个函数转发链机制
+			//比如说 KERNEL32.DLL 里面的 HeapAlloc 函数会转发到 NTDLL.DLL 中的 RtlAllocateHeap 函数，一般情况下 NumberOfModuleForwarderRefs 为 0
+			if (tmp->NumberOfModuleForwarderRefs > 0)
+			{
+				for (int i = 0; i < tmp->NumberOfModuleForwarderRefs; ++i)
+				{
+					p_void_tmp = (PVOID)((DWORDX)p_void_tmp + i * sizeof(IMAGE_BOUND_FORWARDER_REF));
+					PIMAGE_BOUND_FORWARDER_REF p_ref = (PIMAGE_BOUND_FORWARDER_REF)p_void_tmp;
+					p_ref->TimeDateStamp;	//引用时间戳
+					p_ref->OffsetModuleName;//名字偏移
+					p_ref->Reserved;		//保留
+
+					std::cout << "\t\tIMAGE_BOUND_FORWARDER_REF Time:" << p_ref->TimeDateStamp << " Name:" << (const char*)((DWORDX)p_image_bound_import_descriptor_base + p_ref->OffsetModuleName) << std::endl;
+				}
+			}
+			p_void_tmp = (PVOID)((DWORDX)p_void_tmp + sizeof(PIMAGE_BOUND_IMPORT_DESCRIPTOR));
+
+		}
+	}
+
 
 	//输出表
 
