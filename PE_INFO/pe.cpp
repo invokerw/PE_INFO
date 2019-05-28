@@ -304,14 +304,14 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 				DWORDX size = (DWORDX)(p_tmp_reloc->SizeOfBlock - 8) / 2;
 				std::cout << "IMAGE_BASE_RELOCATION VirtualAddress:" << std::hex << p_tmp_reloc->VirtualAddress << " SizeOfBlock:" << p_tmp_reloc->SizeOfBlock << " Size:"<< size << std::endl;
 
-				PWORD p_rec_addr = (PWORD)((PBYTE)p_tmp_reloc->SizeOfBlock + 8);
+				PWORD p_rec_addr = (PWORD)((PBYTE)p_tmp_reloc + 8);
 				for (DWORDX j = 0; j < size; ++j)
 				{
 					DWORD offset = (p_rec_addr[j] & 0X0FFF) + foa;//低四位是偏移地址
 					WORD type = p_rec_addr[j] >> 12;  //高四位是有效判断位
 					if (type == 0) continue;
-
-					std::cout << "\t j offset type" << std::endl;
+					//TODO: 确认
+					std::cout << "\t["<<j << "] offset:" << offset << " type:"<<type<< std::endl;
 				}
 				p_tmp_reloc = (PIMAGE_BASE_RELOCATION)((PBYTE)p_tmp_reloc + p_tmp_reloc->SizeOfBlock);
 			}
