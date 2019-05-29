@@ -300,18 +300,24 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 				p_tmp_reloc->VirtualAddress;	//重定位的 RVA
 				p_tmp_reloc->SizeOfBlock;		//大小
 
-				DWORDX foa = (DWORDX)base + p_tmp_reloc->VirtualAddress - base_relocation_offset;  //偏移
+				DWORDX foa = 0;
+				auto it2 = section_rva_2_offset_map.upper_bound(p_tmp_reloc->VirtualAddress); --it2;
+				if (it2 != section_rva_2_offset_map.end())
+				{
+					foa = p_tmp_reloc->VirtualAddress - it2->second;  //偏移
+				}
 				DWORDX size = (DWORDX)(p_tmp_reloc->SizeOfBlock - 8) / 2;
 				std::cout << "IMAGE_BASE_RELOCATION VirtualAddress:" << std::hex << p_tmp_reloc->VirtualAddress << " SizeOfBlock:" << p_tmp_reloc->SizeOfBlock << " Size:"<< size << std::endl;
 
 				PWORD p_rec_addr = (PWORD)((PBYTE)p_tmp_reloc + 8);
 				for (DWORDX j = 0; j < size; ++j)
 				{
-					DWORD offset = (p_rec_addr[j] & 0X0FFF) + foa;//低四位是偏移地址
+					DWORDX rva = (p_rec_addr[j] & 0x0FFF) + p_tmp_reloc->VirtualAddress;
+					DWORDX offset = (p_rec_addr[j] & 0x0FFF) + foa;//低四位是偏移地址
 					WORD type = p_rec_addr[j] >> 12;  //高四位是有效判断位
 					if (type == 0) continue;
 					//TODO: 确认
-					std::cout << "\t["<<j << "] offset:" << offset << " type:"<<type<< std::endl;
+					std::cout << "\t["<<j << "] rva: "<< rva <<" offset:" << offset << " type:"<<type<< std::endl;
 				}
 				p_tmp_reloc = (PIMAGE_BASE_RELOCATION)((PBYTE)p_tmp_reloc + p_tmp_reloc->SizeOfBlock);
 			}
