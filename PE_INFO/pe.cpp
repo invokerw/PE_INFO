@@ -326,6 +326,59 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 	}
 
 	//资源
+	//PIMAGE_RESOURCE_DIRECTORY p_image_resource_directory = NULL;
+	//DWORDX resource_directory_offset = 0;
+	{
+		PIMAGE_RESOURCE_DIRECTORY p_image_resource_directory = NULL;
+		DWORDX resource_directory_offset = 0;
+		auto it = section_rva_2_offset_map.upper_bound(p_image_data_directory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress); --it;
+		if (p_image_data_directory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress != NULL && it != section_rva_2_offset_map.end())
+		{
+			resource_directory_offset = it->second;
+			p_image_resource_directory = (PIMAGE_RESOURCE_DIRECTORY)((DWORDX)base + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress - resource_directory_offset);
+
+			PIMAGE_RESOURCE_DIRECTORY p_tmp_res = p_image_resource_directory;
+			p_tmp_res->Characteristics;
+			p_tmp_res->MajorVersion;
+			p_tmp_res->MinorVersion;
+			p_tmp_res->NumberOfNamedEntries;	// 用户自定义资源类型的个数
+			p_tmp_res->NumberOfIdEntries;		// 典型资源例如位图，图标，对话框等资源类型的个数
+			p_tmp_res->TimeDateStamp;
+
+			std::cout << "IMAGE_RESOURCE_DIRECTORY NumberOfNamedEntries:" << p_tmp_res->NumberOfNamedEntries 
+				<< " NumberOfIdEntries:" << p_tmp_res->NumberOfIdEntries << std::endl;
+
+			PIMAGE_RESOURCE_DIRECTORY_ENTRY p_tmp_res_entry = (PIMAGE_RESOURCE_DIRECTORY_ENTRY)((DWORDX)p_tmp_res + sizeof(IMAGE_RESOURCE_DIRECTORY));
+			for (auto i = 0; i < p_tmp_res->NumberOfNamedEntries + p_tmp_res->NumberOfIdEntries; ++i)
+			{
+				IMAGE_RESOURCE_DIRECTORY_ENTRY res_dir_entry = p_tmp_res_entry[i];
+				if (res_dir_entry.NameIsString == 1)
+				{
+					std::cout << "\tName:" << res_dir_entry.NameOffset << std::endl;
+				}
+				else
+				{
+					std::cout << "\tID:" << std::dec << res_dir_entry.Id << std::endl;
+				}
+				if (res_dir_entry.DataIsDirectory == 1)
+				{
+					std::cout << "\tOffsetToDirectory:" << res_dir_entry.OffsetToDirectory << std::endl;
+					PIMAGE_RESOURCE_DIRECTORY tmp = (PIMAGE_RESOURCE_DIRECTORY)((DWORDX)p_image_resource_directory + res_dir_entry.OffsetToDirectory);
+					while (true)
+					{
+						break;
+					}
+
+				}
+				else
+				{
+					std::cout << "\tOffsetToData:" << res_dir_entry.OffsetToData << std::endl;
+				}
+			}
+		}
+
+	}
+
 
 	// TLS 初始化
 
