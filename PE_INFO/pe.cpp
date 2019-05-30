@@ -3,6 +3,7 @@
 #include <Winternl.h>
 #include <iostream>
 #include <map>
+#include <string>
 
 std::string data_drictory_str[16] = {
 	"Export Table",
@@ -22,6 +23,8 @@ std::string data_drictory_str[16] = {
 	"Com descriptor",
 	"NULL"
 };
+
+
 
 bool PE_INFO(LPCVOID base, DWORDX length)
 {
@@ -252,7 +255,7 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 				" NumberOfNames:" << p_image_export_directory_base->NumberOfNames << std::endl;
 
 			PDWORD tmp = (PDWORD)((DWORDX)base + p_image_export_directory_base->AddressOfFunctions - export_directory_offset);
-			for (auto i = 0; i < p_image_export_directory_base->NumberOfFunctions; ++i)
+			for (DWORDX i = 0; i < p_image_export_directory_base->NumberOfFunctions; ++i)
 			{
 				auto it = section_rva_2_offset_map.upper_bound(tmp[i]); --it;
 				if (it != section_rva_2_offset_map.end())
@@ -266,13 +269,13 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 			}
 
 			tmp = (PDWORD)((DWORDX)base + p_image_export_directory_base->AddressOfNames - export_directory_offset);
-			for (auto i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
+			for (DWORDX i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
 			{
 				std::cout << "\tIMAGE_EXPORT_DIRECTORY AddressOfNames:" << (const char*)((DWORDX)base + tmp[i] - export_directory_offset) << std::endl;
 			}
 
 			PWORD tmp_pword = (PWORD)((DWORDX)base + p_image_export_directory_base->AddressOfNameOrdinals - export_directory_offset);
-			for (auto i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
+			for (DWORDX i = 0; i < p_image_export_directory_base->NumberOfNames; ++i)
 			{
 				std::cout << "\tIMAGE_EXPORT_DIRECTORY AddressOfNameOrdinals Index:" << std::hex << (tmp_pword[i]) << std::endl;
 
@@ -337,48 +340,10 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 			resource_directory_offset = it->second;
 			p_image_resource_directory = (PIMAGE_RESOURCE_DIRECTORY)((DWORDX)base + p_image_data_directory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress - resource_directory_offset);
 
-			PIMAGE_RESOURCE_DIRECTORY p_tmp_res = p_image_resource_directory;
-			p_tmp_res->Characteristics;
-			p_tmp_res->MajorVersion;
-			p_tmp_res->MinorVersion;
-			p_tmp_res->NumberOfNamedEntries;	// 用户自定义资源类型的个数
-			p_tmp_res->NumberOfIdEntries;		// 典型资源例如位图，图标，对话框等资源类型的个数
-			p_tmp_res->TimeDateStamp;
-
-			std::cout << "IMAGE_RESOURCE_DIRECTORY NumberOfNamedEntries:" << p_tmp_res->NumberOfNamedEntries 
-				<< " NumberOfIdEntries:" << p_tmp_res->NumberOfIdEntries << std::endl;
-
-			PIMAGE_RESOURCE_DIRECTORY_ENTRY p_tmp_res_entry = (PIMAGE_RESOURCE_DIRECTORY_ENTRY)((DWORDX)p_tmp_res + sizeof(IMAGE_RESOURCE_DIRECTORY));
-			for (auto i = 0; i < p_tmp_res->NumberOfNamedEntries + p_tmp_res->NumberOfIdEntries; ++i)
-			{
-				IMAGE_RESOURCE_DIRECTORY_ENTRY res_dir_entry = p_tmp_res_entry[i];
-				if (res_dir_entry.NameIsString == 1)
-				{
-					std::cout << "\tName:" << res_dir_entry.NameOffset << std::endl;
-				}
-				else
-				{
-					std::cout << "\tID:" << std::dec << res_dir_entry.Id << std::endl;
-				}
-				if (res_dir_entry.DataIsDirectory == 1)
-				{
-					std::cout << "\tOffsetToDirectory:" << res_dir_entry.OffsetToDirectory << std::endl;
-					PIMAGE_RESOURCE_DIRECTORY tmp = (PIMAGE_RESOURCE_DIRECTORY)((DWORDX)p_image_resource_directory + res_dir_entry.OffsetToDirectory);
-					while (true)
-					{
-						break;
-					}
-
-				}
-				else
-				{
-					std::cout << "\tOffsetToData:" << res_dir_entry.OffsetToData << std::endl;
-				}
-			}
+			DumpResourceDirectory(p_image_resource_directory, p_image_resource_directory, 0, resource_directory_offset);
 		}
 
 	}
-
 
 	// TLS 初始化
 
@@ -390,7 +355,72 @@ bool PE_INFO(LPCVOID base, DWORDX length)
 
 	//.NET 头部
 
-
-
 	return true;
+}
+
+
+void DumpResourceDirectory(PIMAGE_RESOURCE_DIRECTORY root, PIMAGE_RESOURCE_DIRECTORY base, int depth, DWORDX offset)
+{
+	PIMAGE_RESOURCE_DIRECTORY p_tmp_res = base;
+	p_tmp_res->Characteristics;
+	p_tmp_res->MajorVersion;
+	p_tmp_res->MinorVersion;
+	p_tmp_res->NumberOfNamedEntries;	// 用户自定义资源类型的个数
+	p_tmp_res->NumberOfIdEntries;		// 典型资源例如位图，图标，对话框等资源类型的个数
+	p_tmp_res->TimeDateStamp;
+
+	for (auto i = 0; i < depth; ++i)
+	{
+		std::cout << "\t";
+	}
+	std::cout << "IMAGE_RESOURCE_DIRECTORY NumberOfNamedEntries:" << std::hex << p_tmp_res->NumberOfNamedEntries
+		<< " NumberOfIdEntries:" << p_tmp_res->NumberOfIdEntries << std::endl;
+
+	PIMAGE_RESOURCE_DIRECTORY_ENTRY p_tmp_res_entry = (PIMAGE_RESOURCE_DIRECTORY_ENTRY)((DWORDX)base + sizeof(IMAGE_RESOURCE_DIRECTORY));
+	for (auto i = 0; i < p_tmp_res->NumberOfNamedEntries + p_tmp_res->NumberOfIdEntries; ++i)
+	{
+		IMAGE_RESOURCE_DIRECTORY_ENTRY res_dir_entry = p_tmp_res_entry[i];
+		if (res_dir_entry.NameIsString == 1)
+		{
+			PIMAGE_RESOURCE_DIR_STRING_U name = (PIMAGE_RESOURCE_DIR_STRING_U)((DWORDX)root + res_dir_entry.NameOffset);
+			for (auto j = 0; j < depth; ++j)
+			{
+				std::cout << "\t";
+			}
+			printf("Name:%.*S ", name->Length, name->NameString);
+		}
+		else
+		{
+			for (auto j = 0; j < depth; ++j)
+			{
+				std::cout << "\t";
+			}
+			std::cout << "ID:" << std::hex << res_dir_entry.Id << " ";
+		}
+		if (res_dir_entry.DataIsDirectory == 1)
+		{
+			//for (auto j = 0; j < depth; ++j)
+			//{
+			//	std::cout << "\t";
+			//}
+			//std::cout << "OffsetToDirectory:" << std::hex << res_dir_entry.OffsetToDirectory << std::endl;
+			PIMAGE_RESOURCE_DIRECTORY tmp = (PIMAGE_RESOURCE_DIRECTORY)((DWORDX)root + res_dir_entry.OffsetToDirectory);
+			DumpResourceDirectory(root, tmp, depth + 1, offset);
+
+		}
+		else
+		{
+			PIMAGE_RESOURCE_DATA_ENTRY p_data = (PIMAGE_RESOURCE_DATA_ENTRY)((DWORDX)root + res_dir_entry.OffsetToData);
+			p_data->OffsetToData;	//资源数据的 RVA
+			p_data->Size;			//资源数据的长度
+			p_data->CodePage;		//代码页 一般为 0
+			p_data->Reserved;
+			
+			std::cout << "IMAGE_RESOURCE_DATA_ENTRY rva:" <<std::hex << p_data->OffsetToData
+				<< " offset:" << (p_data->OffsetToData - offset)
+				<< " size:" << p_data->Size 
+				<< " CodePage:" << p_data->CodePage << std::endl;
+			
+		}
+	}
 }
